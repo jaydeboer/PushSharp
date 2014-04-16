@@ -23,36 +23,41 @@ namespace PushSharp.Apple
 		private const int APNS_PRODUCTION_FEEDBACK_PORT = 2196;
 		#endregion
 
-		public ApplePushChannelSettings(bool production, string certificateFile, string certificateFilePwd, bool disableCertificateCheck = false) 
-			: this(production, System.IO.File.ReadAllBytes(certificateFile), certificateFilePwd, disableCertificateCheck) { }
+		// optional time span of inactivity after which the connection should 
+		// be closed and re-opened.
+		internal TimeSpan? IdleConnectionResetTimeout { get; set; }
 
-		public ApplePushChannelSettings(string certificateFile, string certificateFilePwd, bool disableCertificateCheck = false)
-			: this(System.IO.File.ReadAllBytes(certificateFile), certificateFilePwd, disableCertificateCheck) { }
+
+		public ApplePushChannelSettings(bool production, string certificateFile, string certificateFilePwd, bool disableCertificateCheck = false, TimeSpan? idleConnectionResetTimeout = null)
+			: this(production, System.IO.File.ReadAllBytes(certificateFile), certificateFilePwd, disableCertificateCheck, idleConnectionResetTimeout) { }
+
+		public ApplePushChannelSettings(string certificateFile, string certificateFilePwd, bool disableCertificateCheck = false, TimeSpan? idleConnectionResetTimeout = null)
+			: this(System.IO.File.ReadAllBytes(certificateFile), certificateFilePwd, disableCertificateCheck, idleConnectionResetTimeout) { }
 
 		//Need to load the private key seperately from apple
 		// Fixed by danielgindi@gmail.com :
 		//      The default is UserKeySet, which has caused internal encryption errors,
 		//      Because of lack of permissions on most hosting services.
 		//      So MachineKeySet should be used instead.
-		public ApplePushChannelSettings(bool production, byte[] certificateData, string certificateFilePwd, bool disableCertificateCheck = false)
+		public ApplePushChannelSettings(bool production, byte[] certificateData, string certificateFilePwd, bool disableCertificateCheck = false, TimeSpan? idleConnectionResetTimeout = null)
 			: this(production, new X509Certificate2(certificateData, certificateFilePwd,
-				X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable), disableCertificateCheck) { }
+				X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable), disableCertificateCheck, idleConnectionResetTimeout) { }
 
-		public ApplePushChannelSettings(byte[] certificateData, string certificateFilePwd, bool disableCertificateCheck = false)
+		public ApplePushChannelSettings(byte[] certificateData, string certificateFilePwd, bool disableCertificateCheck = false, TimeSpan? idleConnectionResetTimeout = null)
 			: this(new X509Certificate2(certificateData, certificateFilePwd,
-				X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable), disableCertificateCheck) { }
+				X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.PersistKeySet | X509KeyStorageFlags.Exportable), disableCertificateCheck, idleConnectionResetTimeout) { }
 
-		public ApplePushChannelSettings(X509Certificate2 certificate, bool disableCertificateCheck = false)
+		public ApplePushChannelSettings(X509Certificate2 certificate, bool disableCertificateCheck = false, TimeSpan? idleConnectionResetTimeout = null)
 		{
-			Initialize(DetectProduction(certificate), certificate, disableCertificateCheck);
+			Initialize(DetectProduction(certificate), certificate, disableCertificateCheck, idleConnectionResetTimeout);
 		}
 
-		public ApplePushChannelSettings(bool production, X509Certificate2 certificate, bool disableCertificateCheck = false)
+		public ApplePushChannelSettings(bool production, X509Certificate2 certificate, bool disableCertificateCheck = false, TimeSpan? idleConnectionResetTimeout = null)
 		{
-			Initialize(production, certificate, disableCertificateCheck);
+			Initialize(production, certificate, disableCertificateCheck, idleConnectionResetTimeout);
 		}
 
-		void Initialize(bool production, X509Certificate2 certificate, bool disableCertificateCheck)
+		void Initialize(bool production, X509Certificate2 certificate, bool disableCertificateCheck, TimeSpan? idleConnectionResetTimeout)
 		{
 			this.Host = production ? APNS_PRODUCTION_HOST : APNS_SANDBOX_HOST;
 			this.FeedbackHost = production ? APNS_PRODUCTION_FEEDBACK_HOST : APNS_SANDBOX_FEEDBACK_HOST;
@@ -68,14 +73,15 @@ namespace PushSharp.Apple
 			this.FeedbackIntervalMinutes = 10;
 			this.FeedbackTimeIsUTC = false;
 
-            this.AdditionalCertificates = new List<X509Certificate2>();
-            this.AddLocalAndMachineCertificateStores = false;
+			this.AdditionalCertificates = new List<X509Certificate2>();
+			this.AddLocalAndMachineCertificateStores = false;
 
-			if (!disableCertificateCheck)	
+			if (!disableCertificateCheck)
 				CheckProductionCertificateMatching(production);
 
-            this.ValidateServerCertificate = false;
-        }
+			this.ValidateServerCertificate = false;
+			this.IdleConnectionResetTimeout = idleConnectionResetTimeout;
+		}
 
 		public bool DetectProduction(X509Certificate2 certificate)
 		{

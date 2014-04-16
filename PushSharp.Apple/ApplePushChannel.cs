@@ -20,7 +20,7 @@ namespace PushSharp.Apple
 		private const string hostProduction = "gateway.push.apple.com";
 		private const int initialReconnectDelay = 3000;
 		#endregion
-				
+		
 		public delegate void ConnectingDelegate(string host, int port);
 		public event ConnectingDelegate OnConnecting;
 
@@ -42,7 +42,13 @@ namespace PushSharp.Apple
 
 		private int cleanupSync;
 		private Timer timerCleanup;
-		
+
+		// Timer to reset an idle connection.  Some corporate firewalls are configured
+		// to terminate unused connections after a certain amount of inactivity.
+		// The TcpClient is unable to determine that this has happened and causes messages to 
+		// be lost and then PushSharp tends to get into a strange state.
+		private System.Timers.Timer IdleConnectionResetTimer = new System.Timers.Timer();
+
 		public ApplePushChannel(ApplePushChannelSettings channelSettings)
 		{
 			cancelToken = cancelTokenSrc.Token;
@@ -70,6 +76,15 @@ namespace PushSharp.Apple
 
 			timerCleanup = new Timer(state => Cleanup(), null, TimeSpan.FromMilliseconds(1000), TimeSpan.FromMilliseconds(1000));
 
+			if (channelSettings.IdleConnectionResetTimeout.HasValue)
+			{
+				this.IdleConnectionResetTimer.Interval = channelSettings.IdleConnectionResetTimeout.Value.TotalMilliseconds;
+				this.IdleConnectionResetTimer.AutoReset = false;
+				this.IdleConnectionResetTimer.Elapsed += (sender, e) =>
+				{
+					disconnect();
+				};
+			}
 		}
 
 		int cleanedUp = 0;
@@ -99,6 +114,13 @@ namespace PushSharp.Apple
 			lock (sentLock)
 			{
 				Interlocked.Increment(ref trackedNotificationCount);
+
+				//  Since we are sending a message, reset the timers countdown.
+				if (this.IdleConnectionResetTimer != null)
+				{
+					this.IdleConnectionResetTimer.Stop();
+					this.IdleConnectionResetTimer.Start();
+				}
 
 				var appleNotification = notification as AppleNotification;
 				
